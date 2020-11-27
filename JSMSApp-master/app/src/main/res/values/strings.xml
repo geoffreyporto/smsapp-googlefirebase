@@ -1,0 +1,13 @@
+<resources>
+    <string name="app_name">Cloud: Servicios HTTP</string>
+    <string name="lblTitle">Mensajeria SMS</string>
+    <string name="lblName">Nombre:</string>
+    <string name="hntName">Escribe tu nombre</string>
+    <string name="lblSender">Tu número:</string>
+    <string name="hntSender">Escribe tu número</string>
+    <string name="lblReceiver">Número destino:</string>
+    <string name="hntReceiver">Escribe el número destino</string>
+    <string name="lblMessage">Mensaje:</string>
+    <string name="hntMessage">Escribe el mensaje</string>
+    <string name="txtButton">Enviar Mensaje</string>
+</resources>

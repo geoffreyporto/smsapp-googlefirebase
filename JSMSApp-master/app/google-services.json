@@ -1,0 +1,40 @@
+{
+  "project_info": {
+    "project_number": "265035549885",
+    "firebase_url": "https://smsapp-9c7e5.firebaseio.com",
+    "project_id": "smsapp-9c7e5",
+    "storage_bucket": "smsapp-9c7e5.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:265035549885:android:23c3a0845d8123cad07bd4",
+        "android_client_info": {
+          "package_name": "com.daa.jsmsapp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "265035549885-6fq59btsbmrfqh7ggi4jaoi9oq8ak5pg.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAn1NV8RdYChDfdKAMDIp5081s2xEzqu6E"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "265035549885-6fq59btsbmrfqh7ggi4jaoi9oq8ak5pg.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
