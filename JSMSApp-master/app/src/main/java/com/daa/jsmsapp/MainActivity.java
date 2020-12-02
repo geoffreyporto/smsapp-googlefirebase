@@ -1,8 +1,12 @@
 package com.daa.jsmsapp;
 
+//Librerias estandares de Android
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.fragment.app.Fragment;
+import androidx.fragment.app.FragmentManager;
 
 import android.Manifest;
 import android.app.Activity;
@@ -15,7 +19,6 @@ import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.os.StrictMode;
 import android.telephony.SmsManager;
-import android.util.Base64;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
@@ -23,45 +26,32 @@ import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.daa.jsmsapp.sms.SMSReceiver;
+//librerias legacy NO-Optimizadas de Android para SMS
 import com.daa.jsmsapp.sms.Sms;
-import com.daa.jsmsapp.sms.TwilioApi;
 
+//Gestor de fragmentos
+import com.daa.jsmsapp.utils.Fragmento;
 
-//Usando HttPost para servicios http
-import org.apache.http.HttpEntity;
-import org.apache.http.HttpResponse;
-import org.apache.http.NameValuePair;
-import org.apache.http.client.ClientProtocolException;
-import org.apache.http.client.HttpClient;
-import org.apache.http.client.entity.UrlEncodedFormEntity;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.impl.client.DefaultHttpClient;
-import org.apache.http.message.BasicNameValuePair;
-import org.apache.http.util.EntityUtils;
+//Usando HttPost para servicios http NO-OPTIMIZADO
 
-import java.io.IOException;
-import java.net.SocketTimeoutException;
-import java.util.ArrayList;
+//librerias para funcionalidad general
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 
-//Usando OkHttp para servicios http
-import okhttp3.FormBody;
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.RequestBody;
-import okhttp3.Response;
-import okhttp3.ResponseBody;
+//Usando OkHttp para servicios http OPTIMIZADO
 
 
-//Usando Retrofit para servicios http
-import retrofit2.Call;
-import retrofit2.Callback;
-import retrofit2.Retrofit;
+//Usando Retrofit para servicios http MÁS-OPTIMIZADO
+
+
+import com.google.android.gms.tasks.OnFailureListener;
+import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.firebase.Timestamp;
+import com.google.firebase.crashlytics.FirebaseCrashlytics;
+import com.google.firebase.firestore.DocumentReference;
+import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.perf.metrics.Trace;
 
 // Clases de Google Firebase para Performance y Monitoreo
 import com.google.firebase.perf.FirebasePerformance;
@@ -71,9 +61,10 @@ public class MainActivity extends AppCompatActivity {
 
     private static final int PERMISSIONS_REQUEST_SEND_SMS =0 ;
     public static final String ACCOUNT_SID = "AC6e67a409e87e40a18b0c45b8fcf93fe3";
-    public static final String AUTH_TOKEN = "2703a5e3dc7212e4a7bc5653f4614f5b";
+    public static final String AUTH_TOKEN = "f356b3b154abf723e97e3d9ab46a1f9b";
+    public static final String FROM_NUMBER = "+17126616182"; //Numero virtual
+
     public static final String URI_TWILIO_API ="https://api.twilio.com/2010-04-01/Accounts/"+ACCOUNT_SID+"/SMS/Messages";
-    public static final String FROM_NUMBER = "+17126616182";
     public static final String TO_NUMBER = "+528114216460";
     public static final String MSG_SMS = "Mensaje enviado de Android";
 
@@ -85,7 +76,7 @@ public class MainActivity extends AppCompatActivity {
     Sms smssend;
 
     @Override
-    @AddTrace(name = "onCreateTrace", enabled = true /* optional */)
+    @AddTrace(name = "onCreate", enabled = true /* optional */)
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
@@ -102,6 +93,10 @@ public class MainActivity extends AppCompatActivity {
                     StrictMode.ThreadPolicy.Builder().permitAll().build() );
         }
 
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().hide();
+        }
+
         //Campos
         edtName = findViewById(R.id.edtName);
         edtSenderNumber = findViewById(R.id.edtSenderNumber);
@@ -110,9 +105,215 @@ public class MainActivity extends AppCompatActivity {
         btnSend = findViewById(R.id.btnSend);
         tvRecibido = findViewById(R.id.tvRecibido);
 
+
+        //Cargando los botones
+        /*btnUserRegister = findViewById(R.id.btnChat);
+        btnContacto = findViewById(R.id.btnContacto);
+
+        btnChat.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+
+
+                //Refatoring 3
+                //Crear una clase excluisava para cargar fragmenttos, para que cumple totalmente con la (S) del principio de SOLID de buenas prácticas de desarrollo a nivel clases
+
+
+                //Usando una funcion genérica
+                fragment = new ChatsFragment();
+                fragmentManager = getSupportFragmentManager();
+                Fragmento fragmento = new Fragmento(fragment,fragmentManager);
+                fragmento.cargarFragmento();
+
+            }
+        });*/
+
+
         ActivityCompat.requestPermissions(MainActivity.this, new String[] {
                 Manifest.permission.SEND_SMS, Manifest.permission.READ_PHONE_STATE}, PackageManager.PERMISSION_GRANTED);
         Log.i(TAG, "********* Se solicitó permiso para mandar SMS");
+
+
+
+        Trace codeTracking = FirebasePerformance.getInstance().newTrace("sendSmsRetrofit");
+        // Update scenario.
+        codeTracking.putAttribute("experimento ", "Twilio.Message.creator.create()");
+
+        /***
+
+        El crash se desribe abajo:
+        2020-11-30 08:05:59.539 22807-22807/com.daa.jsmsapp E/AndroidRuntime: FATAL EXCEPTION: main
+        Process: com.daa.jsmsapp, PID: 22807
+        java.lang.NoSuchFieldError: No field INSTANCE of type Lorg/apache/http/conn/ssl/AllowAllHostnameVerifier; in class Lorg/apache/http/conn/ssl/AllowAllHostnameVerifier; or its superclasses (declaration of 'org.apache.http.conn.ssl.AllowAllHostnameVerifier' appears in /system/framework/framework.jar:classes2.dex)
+
+         REQUISITOS: Instalaciónn del ADB Debug en su sistema:
+
+         Paso 1: Descompacta el .zip mueve para dentro de un nueva un carpeta "android"
+
+         sudo mkdir android
+         sudo unzip eabcd8b4b7ab518c6af9c941af8494072f17ec4b.platform-tools_r30.0.5-darwin.zip
+         sudo mv /Users/hack/Downloads/platform-tools /usr/local/android
+
+         Paso 2: Configura tu variable de entorno para localizar y ejecutar la herramienta adb
+            sudo nano /etc/profile
+                export ADB_HOME="/usr/local/android/"
+                export PATH="$PATH:$ADB_HOME/platform-tool"
+            source /etc/profile
+         Paso 2: sudo adb shell setprop log.tag.FirebaseCrashlytics DEBUG
+         Paso 3: sudo adb logcat -s FirebaseCrashlytics
+
+
+         References:
+         https://developer.android.com/studio/releases/platform-tools
+
+         */
+
+        codeTracking.start();
+
+
+
+        // Definiendo una key tipo string para la falla.
+        FirebaseCrashlytics.getInstance().setCustomKey("nombre", "twilio.message.create");
+
+        //  Definiendo una key tipo bool para la falla.
+        FirebaseCrashlytics.getInstance().setCustomKey("inicio", true);
+
+        //  Definiendo una key tipo entero para la falla.
+        FirebaseCrashlytics.getInstance().setCustomKey("codigo", 1001);
+
+        // Definiendo una key tipo entero long para la falla.
+        /*FirebaseCrashlytics.getInstance().setCustomKey("int_key", 1L);
+
+        //  Definiendo una key tipo float para la falla.
+         FirebaseCrashlytics.getInstance().setCustomKey("float_key", 1.0f);
+
+        //  Definiendo una key tipo string para la falla.
+         FirebaseCrashlytics.getInstance().setCustomKey("double_key", 1.0);*/
+
+
+        try {
+
+
+            //Conecta a la BD de Firestore
+            FirebaseFirestore db = FirebaseFirestore.getInstance();
+
+            // Creando el scenario de grabación de eventos.
+            Trace codeTrackingfirebaseAgregarEventos = FirebasePerformance.getInstance().newTrace("fireBaseAgregarEventos");
+            codeTrackingfirebaseAgregarEventos.putAttribute("experimento ", "db.collection.create()");
+            codeTrackingfirebaseAgregarEventos.start();
+
+            //Estructura de Datos para registro de evento de Login
+            Map<String, Object> app_eventos = new HashMap<>();
+            app_eventos.put("IDType", "1001"); //ID de Login
+            app_eventos.put("UserID", "JSMSApp");
+            app_eventos.put("Descripcion", "Evento de login");
+            app_eventos.put("FechaHora",  Timestamp.now());
+
+            db.collection("app_eventos")
+                    .add(app_eventos)
+                    .addOnSuccessListener(new OnSuccessListener<DocumentReference>() {
+                        @Override
+                        public void onSuccess(DocumentReference documentReference) {
+                            Log.d(TAG, "Documento Eventos añadido con ID: " + documentReference.getId());
+                        }
+                    })
+                    .addOnFailureListener(new OnFailureListener() {
+                        @Override
+                        public void onFailure(@NonNull Exception e) {
+                            Log.w(TAG, "Error al agregar documentoo", e);
+                        }
+                    });
+
+            codeTrackingfirebaseAgregarEventos.stop();
+
+
+            /*INI: Causa un crash a proposito en la App y lo registra en Google Firebase Crashlytics*/
+
+            /*Twilio.init(ACCOUNT_SID, AUTH_TOKEN);
+
+            Message message = Message.creator(
+                    new PhoneNumber("+528114216460"), //tu cel
+                    new PhoneNumber("+17126616182"), //virtual number
+                    MSG_SMS).create();*/
+
+            /*FIN: Causa un crash a proposito en la App*/
+
+            //throw new RuntimeException("Forzar un Crash");
+
+
+        } catch ( Exception e) {
+
+            //DateFormat dateFormat = android.text.format.DateFormat.getDateFormat(getApplicationContext());
+
+            //Estructura de Datos para registro de evento de error
+            Map<String, Object> app_errors = new HashMap<>();
+            app_errors.put("errorMessage", e.getMessage()); //ErrorMessage
+            app_errors.put("causeMessage", e.getCause().getMessage().toString());
+            app_errors.put("stackMessage", e.getStackTrace().toString());
+            app_errors.put("classMessage", e.getClass().getName());
+            app_errors.put("FechaHora", Timestamp.now());
+
+            Log.i("Message Error:", e.getMessage());
+            Log.i("Causa del Error:", e.getCause().getMessage().toString());
+            Log.i("Stack trace del Error:", e.getStackTrace().toString());
+            Log.i("Clase java del Error:", e.getClass().getName());
+
+            /*CrashlyticsReport.Session.Event.Application.Execution.Exception ex = new CrashlyticsReport.Session.Event.Application.Execution.Exception();
+            Log.i("Tipo del Error:", e.getType());
+            Log.i("Razón del Error:", e.getReason());
+            Log.i("Descripcion del Error:", e.toString());
+            Log.i("Causa del Error:", e.getCausedBy().toString());*/
+            //Report(e);
+            //Throwable
+
+
+            //Firebase Firestore
+            //Nombre collecion: app_reports
+
+            Trace codeTrackingfirebaseAgregarError = FirebasePerformance.getInstance().newTrace("fireBaseAgregarCrashes");
+            // Creando el scenario de grabación de datos.
+            codeTrackingfirebaseAgregarError.putAttribute("experimento ", "twilio.message.create()");
+            codeTrackingfirebaseAgregarError.start();
+
+
+            //Registrando el crash de la App
+            FirebaseCrashlytics.getInstance().log("twilio.message.create"); //ReportID
+            FirebaseCrashlytics.getInstance().setUserId("JSMSApp"); //UserID
+            FirebaseCrashlytics.getInstance().recordException(e);
+
+            //Conecta a la BD de Firestore
+            FirebaseFirestore db = FirebaseFirestore.getInstance();
+
+            db.collection("app_crashes")
+                    .add(app_errors)
+                    .addOnSuccessListener(new OnSuccessListener<DocumentReference>() {
+                        @Override
+                        public void onSuccess(DocumentReference documentReference) {
+                            Log.d(TAG, "Documento Crashes añadido con ID: " + documentReference.getId());
+                        }
+                    })
+                    .addOnFailureListener(new OnFailureListener() {
+                        @Override
+                        public void onFailure(@NonNull Exception e) {
+                            Log.w(TAG, "Error al agregar documentoo", e);
+                        }
+                    });
+
+            codeTrackingfirebaseAgregarError.stop();
+
+
+        }
+
+
+
+
+        codeTracking.stop();
+
+        /*References:
+         https://firebase.google.com/docs/perf-mon/custom-code-traces?platform=android
+         https://firebase.google.com/docs/crashlytics/customize-crash-reports?authuser=0&platform=android
+         */
+
     }
 
     //Método para checar permisos
@@ -272,169 +473,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
-    /*
-    Usando el metodo OkHttp
-    doc: https://square.github.io/okhttp/
-     */
-    private void sendSmsOkHttp(){
-        OkHttpClient client = new OkHttpClient();
-        String url = "https://api.twilio.com/2010-04-01/Accounts/"+ACCOUNT_SID+"/SMS/Messages";
-        String base64EncodedCredentials = "Basic " + Base64.encodeToString((ACCOUNT_SID + ":" + AUTH_TOKEN).getBytes(), Base64.NO_WRAP);
-        RequestBody body = new FormBody.Builder()
-                .add("From", FROM_NUMBER)
-                .add("To", TO_NUMBER)
-                .add("Body", MSG_SMS)
-                .build();
-        Request request = new Request.Builder()
-                .url(url) .post(body)
-                .header("Authorization", base64EncodedCredentials)
-                .build();
-        try {
-            Response response = client.newCall(request).execute();
-            Log.d(TAG, "sendSms: "+ response.body().string());
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-
-
-    /* Retrofit:
-    Doc: https://square.github.io/retrofit/
-    Github: https://github.com/square/retrofit
-     */
-
-    private void sendSmsRetrofit() {
-
-        OkHttpClient.Builder httpClient = new OkHttpClient.Builder()
-                .callTimeout(2, TimeUnit.MINUTES)
-                .connectTimeout(20, TimeUnit.SECONDS)
-                .readTimeout(30, TimeUnit.SECONDS)
-                .writeTimeout(30, TimeUnit.SECONDS);
-
-        //OkHttpClient okHttpClient = UnsafeOkHttpClient.getUnsafeOkHttpClient();
-
-        String base64EncodedCredentials = "Basic " + Base64.encodeToString( (ACCOUNT_SID + ":" + AUTH_TOKEN).getBytes(), Base64.NO_WRAP );
-        Map<String, String> data = new HashMap<>();
-        data.put("From", FROM_NUMBER);
-        data.put("To", TO_NUMBER);
-        data.put("Body", MSG_SMS);
-
-        Retrofit retrofit = new Retrofit.Builder()
-                .baseUrl("https://api.twilio.com/2010-04-01/")
-                //.baseUrl("https://api.twilio.com/2010-04-01/Accounts/")
-                //.client(okHttpClient)
-                .build();
-
-        TwilioApi api = retrofit.create(TwilioApi.class);
-        api.sendMessage(ACCOUNT_SID, base64EncodedCredentials, data).enqueue(new Callback<ResponseBody>() {
-            /**
-             * Invoked for a received HTTP response.
-             *
-             * <p>Note: An HTTP response may still indicate an application-level failure such as a 404 or 500.
-             * Call {@link Response#isSuccessful()} to determine if the response indicates success.
-             *
-             * @param call
-             * @param response
-             */
-            @Override
-            public void onResponse(Call<ResponseBody> call, retrofit2.Response<ResponseBody> response) {
-                if (response.isSuccessful())
-                    Log.d("TAG", "onResponse->success");
-                else Log.d("TAG", "onResponse->failure");
-            }
-
-            /**
-             * Invoked when a network exception occurred talking to the server or when an unexpected exception
-             * occurred creating the request or processing the response.
-             *
-             * @param call
-             * @param t
-             */
-            //Manejo de respuestas de error
-            @Override
-            public void onFailure(Call<ResponseBody> call, Throwable error) {
-
-                if (error instanceof SocketTimeoutException)
-                {
-                    // "Connection Timeout";
-                    Log.d("TAG", "onFailure: "+call.toString()+ "msg: " + error.getMessage().toString());
-                    Toast.makeText(MainActivity.this, "Response" , Toast.LENGTH_SHORT).show();
-                }
-                else if (error instanceof IOException)
-                {
-                    // "Timeout";
-                    Log.d("TAG", "onFailure: "+call.toString()+ "msg: " + error.getMessage().toString());
-                }
-                else
-                {
-                    //Call was cancelled by user
-                    if(call.isCanceled())
-                    {
-                        System.out.println("Call fue cancelada brutalmente");
-                    }
-                    else
-                    {
-                        //Generic error handling
-                        System.out.println("Error de Red :: " + error.getLocalizedMessage());
-                    }
-                }
-
-                Log.d("TAG", "onFailure: "+call.toString()+ "msg: " + error.getMessage().toString());
-
-            }
-
-        });
-
-
-    }
-
-    //Usando el metodo HttpPost
-    public void sendSmsHttpPost() {
-        //Funcionalidad para envío de datos via Http
-        HttpClient httpclient = new DefaultHttpClient();
-
-        Log.i(TAG, "httpclient: " +URI_TWILIO_API);
-        HttpPost httppost = new HttpPost(URI_TWILIO_API);
-        Log.i(TAG, "httppost");
-        String base64EncodedCredentials = "Basic "
-                + Base64.encodeToString(
-                (ACCOUNT_SID + ":" + AUTH_TOKEN).getBytes(),
-                Base64.NO_WRAP);
-        Log.i(TAG, "base64EncodedCredentials");
-        httppost.setHeader("Authorization",
-                base64EncodedCredentials);
-        Log.i(TAG, "setHeader");
-        try {
-
-            List<NameValuePair> nameValuePairs = new ArrayList<NameValuePair>();
-            nameValuePairs.add(new BasicNameValuePair("From",
-                    FROM_NUMBER));
-            nameValuePairs.add(new BasicNameValuePair("To",
-                    TO_NUMBER));
-            nameValuePairs.add(new BasicNameValuePair("Body",
-                    MSG_SMS));
-            Log.i(TAG, "parametros");
-            httppost.setEntity(new UrlEncodedFormEntity(
-                    nameValuePairs));
-
-            Log.i(TAG, "setEntity");
-            // Execute HTTP Post Request
-            HttpResponse response = httpclient.execute(httppost);
-
-            Log.i(TAG, "response");
-            HttpEntity entity = response.getEntity();
-
-            System.out.println("El mensaje fue enviado fue: " + EntityUtils.toString(entity));
-
-
-        } catch (ClientProtocolException e) {
-            Log.i(TAG, "ClientProtocolException: "+e.toString());
-
-        } catch (IOException e) {
-            Log.i(TAG, "IOException: "+e.toString());
-        }
-    }
 
     //Checando si el telefono tiene el permiso de SMS activado
     @Override
@@ -497,5 +535,6 @@ public class MainActivity extends AppCompatActivity {
         }
 
     };
+
 
 }

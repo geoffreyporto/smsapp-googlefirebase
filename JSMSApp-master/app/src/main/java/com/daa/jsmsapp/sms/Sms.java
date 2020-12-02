@@ -5,7 +5,14 @@ import android.net.Uri;
 import android.util.Base64;
 import android.util.Log;
 
+import androidx.annotation.NonNull;
+
 import com.daa.jsmsapp.BuildConfig;
+import com.google.android.gms.tasks.OnFailureListener;
+import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.firebase.Timestamp;
+import com.google.firebase.firestore.DocumentReference;
+import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.perf.FirebasePerformance;
 import com.google.firebase.perf.metrics.Trace;
 import com.google.gson.Gson;
@@ -53,11 +60,18 @@ public class Sms {
     String msg;
 
     public static final String ACCOUNT_SID = "AC6e67a409e87e40a18b0c45b8fcf93fe3";
-    public static final String AUTH_TOKEN = "2703a5e3dc7212e4a7bc5653f4614f5b";
+    public static final String AUTH_TOKEN = "f356b3b154abf723e97e3d9ab46a1f9b";
+    public static final String FROM_NUMBER = "+17126616182"; //Numero virtual
     public static final String URI_TWILIO_API ="https://api.twilio.com/2010-04-01/Accounts/"+ACCOUNT_SID+"/SMS/Messages";
-    public static final String FROM_NUMBER = "+17126616182";
     public static final String TO_NUMBER = "+528114216460";
     public static final String MSG_SMS = "Mensaje enviado de Android";
+
+    public static final Integer DATA_EVENTS= 1; //app_eventos
+    public static final Integer DATA_ERRORS= 2; //app_errors
+    public static final Integer DATA_APPOINTMENT= 3; //app_appointment
+    public static final Integer DATA_PATIENT= 4; //patient
+    public static final Integer DATA_DOCTOR= 5; //doctor
+
 
     private static final String TAG = Sms.class.getSimpleName();
 
@@ -73,10 +87,43 @@ public class Sms {
         }
     }
 
+    //Contructor con los parametros iniciales
     public Sms(String nombre, String telOrigen, String telDestino, String msg) {
         this.nombre = nombre;
         this.telOrigen = "+1"+telOrigen;
         this.telDestino = "+52"+telDestino;
+        this.msg = msg;
+    }
+
+    public String getNombre() {
+        return nombre;
+    }
+
+    public void setNombre(String nombre) {
+        this.nombre = nombre;
+    }
+
+    public String getTelOrigen() {
+        return telOrigen;
+    }
+
+    public void setTelOrigen(String telOrigen) {
+        this.telOrigen = telOrigen;
+    }
+
+    public String getTelDestino() {
+        return telDestino;
+    }
+
+    public void setTelDestino(String telDestino) {
+        this.telDestino = telDestino;
+    }
+
+    public String getMsg() {
+        return msg;
+    }
+
+    public void setMsg(String msg) {
         this.msg = msg;
     }
 
@@ -121,7 +168,7 @@ public class Sms {
 
         Trace codeTracking = FirebasePerformance.getInstance().newTrace("sendSmsRetrofit");
         // Update scenario.
-        codeTracking.putAttribute("experimento ", "26112020");
+        codeTracking.putAttribute("experimento ", "sendSmsRetrofit");
 
         codeTracking.start();
 
@@ -130,11 +177,10 @@ public class Sms {
         String experimentValue = codeTracking.getAttribute("experimento");
 
         // Eliminando scenario.
-        codeTracking.removeAttribute("experiment");
+        //codeTracking.removeAttribute("experimento");
 
         // Leyendo atributo.
         Map<String, String> traceAttributes = codeTracking.getAttributes();
-
 
 
         // Define la estructura de mensajes via interprette de JSONs llamado gson
@@ -202,9 +248,54 @@ public class Sms {
              */
             @Override
             public void onResponse(Call<ResponseBody> call, retrofit2.Response<ResponseBody> response) {
-                if (response.isSuccessful())
+                if (response.isSuccessful()) {
+
                     Log.d("TAG", "onResponse->success");
-                else Log.d("TAG", "onResponse->failure");
+
+                    //Registrando en Firestore el envio de SMS
+                    FirebaseFirestore db = FirebaseFirestore.getInstance();
+                    // Creando el scenario de grabación de eventos.
+                    Trace codeTrackingfirebaseAgregarEventos = FirebasePerformance.getInstance().newTrace("fireBaseAgregarEventos");
+                    codeTrackingfirebaseAgregarEventos.putAttribute("experimento ", "db.collection.create()");
+                    codeTrackingfirebaseAgregarEventos.start();
+
+                    Map<String, Object> app_eventos = new HashMap<>();
+                    app_eventos.put("IDType", "1002"); //ID de envio SMS
+                    app_eventos.put("Status", "Exitoso"); //Exitoso
+                    app_eventos.put("UserID", "JSMSApp");
+                    app_eventos.put("Descripcion", "Evento de envio SMS");
+                    app_eventos.put("FechaHora",  Timestamp.now());
+
+                    //guardando eventos en Google Fiebase Firestore
+                    saveEvents(db,DATA_EVENTS,app_eventos);
+
+                    //parando de monitorear eventos de performance
+                    codeTrackingfirebaseAgregarEventos.stop();
+
+                } else {
+                    Log.d("TAG", "onResponse->failure");
+
+                    //Registrando en Firestore el envio de SMS
+                    FirebaseFirestore db = FirebaseFirestore.getInstance();
+                    // Creando el scenario de grabación de eventos.
+                    Trace codeTrackingfirebaseAgregarEventos = FirebasePerformance.getInstance().newTrace("fireBaseAgregarEventos");
+                    codeTrackingfirebaseAgregarEventos.putAttribute("experimento ", "db.collection.create()");
+                    codeTrackingfirebaseAgregarEventos.start();
+
+                    Map<String, Object> app_errors = new HashMap<>();
+                    app_errors.put("IDType", "1002"); //ID de envio SMS
+                    app_errors.put("Status", "Falló"); //Fallo
+                    app_errors.put("UserID", "JSMSApp");
+                    app_errors.put("Descripcion", "Evento de envio SMS");
+                    app_errors.put("FechaHora",  Timestamp.now());
+
+                    //guardando eventos en Google Fiebase Firestore
+                    saveEvents(db,DATA_ERRORS,app_errors);
+
+                    //parando de monitorear eventos de performance
+                    codeTrackingfirebaseAgregarEventos.stop();
+
+                }
             }
 
             /**
@@ -222,11 +313,52 @@ public class Sms {
                 {
                     // "Connection Timeout";
                     Log.d("TAG", "onFailure: "+call.toString()+ "msg: " + error.getMessage().toString());
+
+                    //Registrando en Firestore el envio de SMS
+                    FirebaseFirestore db = FirebaseFirestore.getInstance();
+                    // Creando el scenario de grabación de eventos.
+                    Trace codeTrackingfirebaseAgregarEventos = FirebasePerformance.getInstance().newTrace("fireBaseAgregarEventos");
+                    codeTrackingfirebaseAgregarEventos.putAttribute("experimento ", "db.collection.create()");
+                    codeTrackingfirebaseAgregarEventos.start();
+
+                    Map<String, Object> app_errors = new HashMap<>();
+                    app_errors.put("IDType", "1002"); //ID de envio SMS
+                    app_errors.put("Status", "Falló"); //Fallo
+                    app_errors.put("UserID", "JSMSApp");
+                    app_errors.put("Descripcion", call.toString() +"::"+error.getMessage().toString() );
+                    app_errors.put("FechaHora",  Timestamp.now());
+
+                    //guardando eventos en Google Fiebase Firestore
+                    saveEvents(db,DATA_ERRORS,app_errors);
+
+                    //parando de monitorear eventos de performance
+                    codeTrackingfirebaseAgregarEventos.stop();
+
                 }
                 else if (error instanceof IOException)
                 {
                     // "Timeout";
                     Log.d("TAG", "onFailure: "+call.toString()+ "msg: " + error.getMessage().toString());
+                    //Registrando en Firestore el envio de SMS
+                    FirebaseFirestore db = FirebaseFirestore.getInstance();
+                    // Creando el scenario de grabación de eventos.
+                    Trace codeTrackingfirebaseAgregarEventos = FirebasePerformance.getInstance().newTrace("fireBaseAgregarEventos");
+                    codeTrackingfirebaseAgregarEventos.putAttribute("experimento ", "db.collection.create()");
+                    codeTrackingfirebaseAgregarEventos.start();
+
+                    Map<String, Object> app_errors = new HashMap<>();
+                    app_errors.put("IDType", "1002"); //ID de envio SMS
+                    app_errors.put("Status", "Falló"); //Fallo
+                    app_errors.put("UserID", "JSMSApp");
+                    app_errors.put("Descripcion", call.toString() +"::"+error.getMessage().toString() );
+                    app_errors.put("FechaHora",  Timestamp.now());
+
+                    //guardando eventos en Google Fiebase Firestore
+                    saveEvents(db,DATA_ERRORS,app_errors);
+
+                    //parando de monitorear eventos de performance
+                    codeTrackingfirebaseAgregarEventos.stop();
+
                 }
                 else
                 {
@@ -239,6 +371,25 @@ public class Sms {
                     {
                         //Generic error handling
                         System.out.println("Error de Red :: " + error.getLocalizedMessage());
+                        //Registrando en Firestore el envio de SMS
+                        FirebaseFirestore db = FirebaseFirestore.getInstance();
+                        // Creando el scenario de grabación de eventos.
+                        Trace codeTrackingfirebaseAgregarEventos = FirebasePerformance.getInstance().newTrace("fireBaseAgregarEventos");
+                        codeTrackingfirebaseAgregarEventos.putAttribute("experimento ", "db.collection.create()");
+                        codeTrackingfirebaseAgregarEventos.start();
+
+                        Map<String, Object> app_errors = new HashMap<>();
+                        app_errors.put("IDType", "1002"); //ID de envio SMS
+                        app_errors.put("Status", "Falló"); //Fallo
+                        app_errors.put("UserID", "JSMSApp");
+                        app_errors.put("Descripcion", error.getLocalizedMessage() );
+                        app_errors.put("FechaHora",  Timestamp.now());
+
+                        //guardando eventos en Google Fiebase Firestore
+                        saveEvents(db,DATA_ERRORS,app_errors);
+
+                        //parando de monitorear eventos de performance
+                        codeTrackingfirebaseAgregarEventos.stop();
                     }
                 }
 
@@ -252,6 +403,44 @@ public class Sms {
         codeTracking.stop();
 
 
+    }
+
+    //guardar datos en Google Firebase firestore
+
+    public void saveEvents( FirebaseFirestore db, Integer Datatype, Map<String, Object>  data ) {
+        if (Datatype==1 && data != null) {
+            db.collection("app_eventos")
+                    .add(data)
+                    .addOnSuccessListener(new OnSuccessListener<DocumentReference>() {
+                        @Override
+                        public void onSuccess(DocumentReference documentReference) {
+                            Log.d(TAG, "Documento Eventos añadido con ID: " + documentReference.getId());
+                        }
+                    })
+                    .addOnFailureListener(new OnFailureListener() {
+                        @Override
+                        public void onFailure(@NonNull Exception e) {
+                            Log.w(TAG, "Error al agregar documentoo", e);
+                        }
+                    });
+
+        } else if (Datatype==2 && data != null) {
+            db.collection("app_errors")
+                    .add(data)
+                    .addOnSuccessListener(new OnSuccessListener<DocumentReference>() {
+                        @Override
+                        public void onSuccess(DocumentReference documentReference) {
+                            Log.d(TAG, "Documento Errors añadido con ID: " + documentReference.getId());
+                        }
+                    })
+                    .addOnFailureListener(new OnFailureListener() {
+                        @Override
+                        public void onFailure(@NonNull Exception e) {
+                            Log.w(TAG, "Error al agregar documentoo", e);
+                        }
+                    });
+
+        }
     }
 
     //Envio por medio de WhatsApp
@@ -352,35 +541,5 @@ public class Sms {
         }
     }
 
-    public String getNombre() {
-        return nombre;
-    }
 
-    public void setNombre(String nombre) {
-        this.nombre = nombre;
-    }
-
-    public String getTelOrigen() {
-        return telOrigen;
-    }
-
-    public void setTelOrigen(String telOrigen) {
-        this.telOrigen = telOrigen;
-    }
-
-    public String getTelDestino() {
-        return telDestino;
-    }
-
-    public void setTelDestino(String telDestino) {
-        this.telDestino = telDestino;
-    }
-
-    public String getMsg() {
-        return msg;
-    }
-
-    public void setMsg(String msg) {
-        this.msg = msg;
-    }
 }
